@@ -2,13 +2,14 @@ import os
 import uuid
 from flask import Flask, render_template_string, request, send_from_directory
 from docx import Document
-import pdfkit  # pip install pdfkit
 
 app = Flask(__name__)
 
+# Carpeta temporal para guardar los archivos
 TMP_FOLDER = "static/tmp"
 os.makedirs(TMP_FOLDER, exist_ok=True)
 
+# HTML responsivo
 FORM_HTML = """
 <!DOCTYPE html>
 <html lang="es">
@@ -111,11 +112,7 @@ window.onload = function() {
             Total materiales: <span id="total_materiales">$0.00 MXN</span> | Total general: <span id="total_general">$0.00 MXN</span>
         </div>
 
-        <label>Formato de archivo:</label>
-        <label><input type="radio" name="formato" value="docx" checked> Word (.docx)</label>
-        <label><input type="radio" name="formato" value="pdf"> PDF (.pdf)</label>
-
-        <button type="submit">Generar cotización</button>
+        <button type="submit">Generar Word</button>
     </form>
 </div>
 </body>
@@ -137,6 +134,7 @@ def generar():
         "pago_acordado": request.form["pago_acordado"]
     }
 
+    # Conceptos
     conceptos = []
     total_materiales = 0
     for i, (c, cant, u, v) in enumerate(zip(
@@ -162,11 +160,7 @@ def generar():
     gestion = float(request.form.get("gestion", 0))
     total_general = total_materiales + mano_obra + gestion
 
-    formato = request.form.get("formato", "docx")
-    filename = f"cotizacion_{uuid.uuid4().hex}.{formato}"
-    filepath = os.path.join(TMP_FOLDER, filename)
-
-    # Generar docx
+    # Crear docx
     doc = Document("plantilla1.docx")
     for para in doc.paragraphs:
         for key, value in datos_generales.items():
@@ -176,6 +170,7 @@ def generar():
         para.text = para.text.replace("${{gestion}}", f"${gestion:.2f} MXN")
         para.text = para.text.replace("${{total_general}}", f"${total_general:.2f} MXN")
 
+    # Tabla conceptos
     tabla = doc.tables[0]
     fila_ejemplo = tabla.rows[1]
     tabla._tbl.remove(fila_ejemplo._tr)
@@ -188,6 +183,7 @@ def generar():
         fila.cells[4].text = f"${c['valor_unitario']:.2f} MXN"
         fila.cells[5].text = f"${c['subtotal']:.2f} MXN"
 
+    # Tabla resumen
     tabla_resumen = doc.tables[1]
     while len(tabla_resumen.rows) < 4:
         tabla_resumen.add_row()
@@ -196,17 +192,14 @@ def generar():
     tabla_resumen.cell(2,1).text = f"${gestion:.2f} MXN"
     tabla_resumen.cell(3,1).text = f"${total_general:.2f} MXN"
 
+    # Guardar docx temporal
+    filename = f"cotizacion_{uuid.uuid4().hex}.docx"
+    filepath = os.path.join(TMP_FOLDER, filename)
     doc.save(filepath)
-
-    if formato == "pdf":
-        pdf_filename = filename.replace(".docx", ".pdf")
-        pdf_filepath = os.path.join(TMP_FOLDER, pdf_filename)
-        pdfkit.from_file(filepath, pdf_filepath)
-        filename = pdf_filename
 
     return f"""
     <h3>Tu cotización está lista ✅</h3>
-    <p>Descárgala aquí: <a href="/descargar/{filename}">Descargar {formato.upper()}</a></p>
+    <p>Descárgala aquí: <a href="/descargar/{filename}">Descargar Word</a></p>
     """
 
 @app.route("/descargar/<filename>")
@@ -215,5 +208,6 @@ def descargar(filename):
 
 if __name__ == "__main__":
     app.run(debug=True)
+
 
 
